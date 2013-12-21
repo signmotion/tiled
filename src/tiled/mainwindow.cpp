@@ -183,9 +183,7 @@ MainWindow::MainWindow(QWidget *parent, Qt::WindowFlags flags)
     addDockWidget(Qt::RightDockWidgetArea, mTilesetDock);
     addDockWidget(Qt::RightDockWidgetArea, propertiesDock);
     addDockWidget(Qt::RightDockWidgetArea, mConsoleDock);
-    addDockWidget(Qt::RightDockWidgetArea, mTileCollisionEditor);
 
-    tabifyDockWidget(mTileCollisionEditor, mMiniMapDock);
     tabifyDockWidget(mMiniMapDock, mObjectsDock);
     tabifyDockWidget(mObjectsDock, mLayerDock);
     tabifyDockWidget(mTerrainDock, mTilesetDock);
@@ -196,7 +194,6 @@ MainWindow::MainWindow(QWidget *parent, Qt::WindowFlags flags)
     undoDock->setVisible(false);
     mMapsDock->setVisible(false);
     mConsoleDock->setVisible(false);
-    mTileCollisionEditor->setVisible(false);
 
     statusBar()->addPermanentWidget(mZoomComboBox);
 
@@ -419,11 +416,19 @@ MainWindow::MainWindow(QWidget *parent, Qt::WindowFlags flags)
     // Add the 'Views and Toolbars' submenu. This needs to happen after all
     // the dock widgets and toolbars have been added to the main window.
     mViewsAndToolbarsMenu = new QAction(tr("Views and Toolbars"), this);
+    mShowTileCollisionEditor = new QAction(tr("Show Tile Collision Editor"), this);
+    mShowTileCollisionEditor->setCheckable(true);
     QMenu *popupMenu = createPopupMenu();
     popupMenu->setParent(this);
     mViewsAndToolbarsMenu->setMenu(popupMenu);
     mUi->menuView->insertAction(mUi->actionShowGrid, mViewsAndToolbarsMenu);
+    mUi->menuView->insertAction(mUi->actionShowGrid, mShowTileCollisionEditor);
     mUi->menuView->insertSeparator(mUi->actionShowGrid);
+
+    connect(mShowTileCollisionEditor, SIGNAL(changed()),
+            mTileCollisionEditor, SLOT(setVisible(bool)));
+//    connect(mTileCollisionEditor, SIGNAL(closed()),
+//            mShowTileCollisionEditor, SLOT(set(bool)));
 
     connect(ClipboardManager::instance(), SIGNAL(hasMapChanged()), SLOT(updateActions()));
 
@@ -991,7 +996,8 @@ void MainWindow::paste()
     if (!currentLayer)
         return;
 
-    Map *map = ClipboardManager::instance()->map();
+    ClipboardManager *clipboardManager = ClipboardManager::instance();
+    QScopedPointer<Map> map(clipboardManager->map());
     if (!map)
         return;
 
@@ -999,14 +1005,13 @@ void MainWindow::paste()
     if (map->layerCount() != 1) {
         // Need to clean up the tilesets since they didn't get an owner
         qDeleteAll(map->tilesets());
-        delete map;
         return;
     }
 
     TilesetManager *tilesetManager = TilesetManager::instance();
     tilesetManager->addReferences(map->tilesets());
 
-    mMapDocument->unifyTilesets(map);
+    mMapDocument->unifyTilesets(map.data());
     Layer *layer = map->layerAt(0);
 
     if (TileLayer *tileLayer = layer->asTileLayer()) {
@@ -1015,52 +1020,11 @@ void MainWindow::paste()
         setStampBrush(tileLayer);
         mToolManager->selectTool(mStampBrush);
     } else if (ObjectGroup *objectGroup = layer->asObjectGroup()) {
-        if (ObjectGroup *currentObjectGroup = currentLayer->asObjectGroup()) {
-            // Determine where to insert the objects
-            const QPointF center = objectGroup->objectsBoundingRect().center();
-            const MapView *view = mDocumentManager->currentMapView();
-
-            // Take the mouse position if the mouse is on the view, otherwise
-            // take the center of the view.
-            QPoint viewPos;
-            if (view->underMouse())
-                viewPos = view->mapFromGlobal(QCursor::pos());
-            else
-                viewPos = QPoint(view->width() / 2, view->height() / 2);
-
-            const MapRenderer *renderer = mMapDocument->renderer();
-            const QPointF scenePos = view->mapToScene(viewPos);
-            QPointF insertPos = renderer->pixelToTileCoords(scenePos);
-            if (Preferences::instance()->snapToFineGrid()) {
-                int gridFine = Preferences::instance()->gridFine();
-                insertPos = (insertPos * gridFine).toPoint();
-                insertPos /= gridFine;
-            } else if (Preferences::instance()->snapToGrid()) {
-                insertPos = insertPos.toPoint();
-            }
-            const QPointF offset = insertPos - center;
-
-            QUndoStack *undoStack = mMapDocument->undoStack();
-            QList<MapObject*> pastedObjects;
-            pastedObjects.reserve(objectGroup->objectCount());
-
-            undoStack->beginMacro(tr("Paste Objects"));
-            foreach (const MapObject *mapObject, objectGroup->objects()) {
-                MapObject *objectClone = mapObject->clone();
-                objectClone->setPosition(objectClone->position() + offset);
-                pastedObjects.append(objectClone);
-                undoStack->push(new AddMapObject(mMapDocument,
-                                                 currentObjectGroup,
-                                                 objectClone));
-            }
-            undoStack->endMacro();
-
-            mMapDocument->setSelectedObjects(pastedObjects);
-        }
+        const MapView *view = mDocumentManager->currentMapView();
+        clipboardManager->pasteObjectGroup(objectGroup, mMapDocument, view);
     }
 
     tilesetManager->removeReferences(map->tilesets());
-    delete map;
 }
 
 void MainWindow::delete_()

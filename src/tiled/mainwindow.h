@@ -236,7 +236,7 @@ private:
 
     QMenu *mLayerMenu;
     QAction *mViewsAndToolbarsMenu;
-
+    QAction *mShowTileCollisionEditor;
 
     void setupQuickStamps();
 
