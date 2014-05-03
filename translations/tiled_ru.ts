@@ -241,6 +241,19 @@
     </message>
 </context>
 <context>
+    <name>World::WorldPlugin</name>
+    <message>
+        <location filename="../src/plugins/world/worldplugin.cpp" line="+55"/>
+        <source>Could not open file for writing.</source>
+        <translation>Не удается открыть файл для записи.</translation>
+    </message>
+    <message>
+        <location line="+16"/>
+        <source>World files (*.world)</source>
+        <translation>World файлы (*.world)</translation>
+    </message>
+</context>
+<context>
     <name>MainWindow</name>
     <message>
         <location filename="../src/tiled/mainwindow.ui" line="+17"/>

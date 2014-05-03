@@ -1,4 +1,4 @@
-include(../plugin.pri)
+ include(../plugin.pri)
 
 DEFINES += FLARE_LIBRARY
 
